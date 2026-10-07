@@ -1,4 +1,9 @@
-# Rock Ledger | Backend
+﻿<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/dark-mode-horizontal-header.webp">
+  <img src="docs/brand/light-mode-horizontal-header.webp" alt="Rock Ledger: Faithful stewardship. Greater impact.">
+</picture>
+
+# Backend
 
 > The secure API and data layer behind the ministry's financial ledger.
 
@@ -8,7 +13,7 @@
 
 The Spring Boot REST API and PostgreSQL persistence layer for **Rock Ledger**. It powers authenticated ledger operations, user administration, immutable transaction history, and Capitec PDF statement imports.
 
-| [Project overview](../README.md) | [Frontend guide](../frontend/README.md) |
+| [Frontend repository](https://github.com/mr-h-digital/rock-ledger-web) | [Live frontend](https://mr-h-digital.github.io/rock-ledger-web/) |
 |:---:|:---:|
 
 ## The shape of the system
@@ -25,9 +30,9 @@ flowchart LR
 
 | Layer | Technology |
 |---|---|
-| Runtime | Java 21 · Spring Boot 3.3 |
-| API security | Spring Security · signed JWT access tokens · TOTP |
-| Data | PostgreSQL · Spring Data JPA · Flyway |
+| Runtime | Java 21 Â· Spring Boot 3.3 |
+| API security | Spring Security Â· signed JWT access tokens Â· TOTP |
+| Data | PostgreSQL Â· Spring Data JPA Â· Flyway |
 | Statement parsing | Apache PDFBox |
 | Build | Maven |
 
@@ -133,7 +138,7 @@ The executable Spring Boot JAR is generated in `target/`.
 
 ## Deploy
 
-Deploy this directory as the backend service with a PostgreSQL database and the production environment variables above. Set `ALLOWED_ORIGIN` to the exact frontend origin and keep `COOKIE_SECURE=true` over HTTPS. Follow the [project deployment guide](../README.md) for Railway and custom-domain setup.
+Deploy this repository as the backend service (for example on Railway) with a PostgreSQL database and the production environment variables above. Set `ALLOWED_ORIGIN` to the exact frontend origin and keep `COOKIE_SECURE=true` over HTTPS. Host the API on a domain that shares its registrable domain with the frontend (for example `ledger-api.rockmission.co.za` alongside `ledger.rockmission.co.za`), because the `SameSite=Strict` refresh cookie requires it.
 
 ## Source map
 
