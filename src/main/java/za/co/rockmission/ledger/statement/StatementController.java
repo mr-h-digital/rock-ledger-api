@@ -9,14 +9,19 @@ import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.regex.Pattern;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
+import za.co.rockmission.ledger.storage.FileStore;
 import za.co.rockmission.ledger.transaction.Transaction;
 import za.co.rockmission.ledger.transaction.TransactionRepository;
 
@@ -36,10 +41,12 @@ public class StatementController {
 
     private final JdbcTemplate jdbc;
     private final TransactionRepository txns;
+    private final FileStore files;
 
-    public StatementController(JdbcTemplate jdbc, TransactionRepository txns) {
+    public StatementController(JdbcTemplate jdbc, TransactionRepository txns, FileStore files) {
         this.jdbc = jdbc;
         this.txns = txns;
+        this.files = files;
     }
 
     @PostMapping(value = "/bank-statements", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -77,28 +84,59 @@ public class StatementController {
                 + ", closing " + parsed.closing() + "). A month may be missing.");
         }
 
-        Long statementId = jdbc.queryForObject("""
-            INSERT INTO bank_statements (account_id, file_name, sha256, layout, period_from, period_to,
-                opening_balance, closing_balance, line_count, pdf, imported_by)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?) RETURNING id
-            """, Long.class, accountId, name, sha, parsed.layout(), parsed.from(), parsed.to(),
-            parsed.opening(), parsed.closing(), parsed.lines().size(), pdf, who.getName());
+        boolean storeInBucket = files.enabled();
+        String storageKey = storeInBucket ? "bank-statements/" + UUID.randomUUID() + ".pdf" : null;
+        byte[] databasePdf = storeInBucket ? null : pdf;
+        try {
+            if (storeInBucket) files.put(storageKey, pdf, MediaType.APPLICATION_PDF_VALUE);
 
-        int inserted = 0;
-        for (StatementParser.Line l : parsed.lines()) {
-            String hash = sha256((accountId + "|" + l.txnDate() + "|" + l.amount() + "|" + l.fee() + "|"
-                + l.balanceAfter() + "|" + l.description()).getBytes(StandardCharsets.UTF_8));
-            inserted += jdbc.update("""
-                INSERT INTO bank_lines (statement_id, account_id, post_date, txn_date, description, amount, fee,
-                    balance_after, line_hash)
-                VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT (line_hash) DO NOTHING
-                """, statementId, accountId, l.postDate(), l.txnDate(), l.description(), l.amount(), l.fee(),
-                l.balanceAfter(), hash);
+            Long statementId = jdbc.queryForObject("""
+                INSERT INTO bank_statements (account_id, file_name, sha256, layout, period_from, period_to,
+                    opening_balance, closing_balance, line_count, pdf, storage_key, imported_by)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id
+                """, Long.class, accountId, name, sha, parsed.layout(), parsed.from(), parsed.to(),
+                parsed.opening(), parsed.closing(), parsed.lines().size(), databasePdf, storageKey, who.getName());
+
+            int inserted = 0;
+            for (StatementParser.Line l : parsed.lines()) {
+                String hash = sha256((accountId + "|" + l.txnDate() + "|" + l.amount() + "|" + l.fee() + "|"
+                    + l.balanceAfter() + "|" + l.description()).getBytes(StandardCharsets.UTF_8));
+                inserted += jdbc.update("""
+                    INSERT INTO bank_lines (statement_id, account_id, post_date, txn_date, description, amount, fee,
+                        balance_after, line_hash)
+                    VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT (line_hash) DO NOTHING
+                    """, statementId, accountId, l.postDate(), l.txnDate(), l.description(), l.amount(), l.fee(),
+                    l.balanceAfter(), hash);
+            }
+            jdbc.update("INSERT INTO audit_log (actor, action, entity, entity_id, detail) VALUES (?,?,?,?,?)",
+                who.getName(), "IMPORT", "bank_statement", statementId, name + ": " + inserted + " new lines");
+            return new ImportResult(statementId, parsed.layout(), parsed.from(), parsed.to(), parsed.opening(),
+                parsed.closing(), parsed.lines().size(), inserted, parsed.lines().size() - inserted, warnings);
+        } catch (RuntimeException failure) {
+            if (storageKey != null) {
+                try {
+                    files.delete(storageKey);
+                } catch (RuntimeException cleanupFailure) {
+                    failure.addSuppressed(cleanupFailure);
+                }
+            }
+            throw failure;
         }
-        jdbc.update("INSERT INTO audit_log (actor, action, entity, entity_id, detail) VALUES (?,?,?,?,?)",
-            who.getName(), "IMPORT", "bank_statement", statementId, name + ": " + inserted + " new lines");
-        return new ImportResult(statementId, parsed.layout(), parsed.from(), parsed.to(), parsed.opening(),
-            parsed.closing(), parsed.lines().size(), inserted, parsed.lines().size() - inserted, warnings);
+    }
+
+    @GetMapping(value = "/bank-statements/{id}/file", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> statementFile(@PathVariable Long id) {
+        List<Map<String, Object>> rows = jdbc.queryForList(
+            "SELECT file_name, pdf, storage_key FROM bank_statements WHERE id = ?", id);
+        if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        Map<String, Object> statement = rows.get(0);
+        String storageKey = (String) statement.get("storage_key");
+        byte[] pdf = storageKey == null ? (byte[]) statement.get("pdf") : files.get(storageKey);
+        return ResponseEntity.ok()
+            .contentType(MediaType.APPLICATION_PDF)
+            .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                .filename((String) statement.get("file_name"), StandardCharsets.UTF_8).build().toString())
+            .body(pdf);
     }
 
     @GetMapping("/bank-statements")

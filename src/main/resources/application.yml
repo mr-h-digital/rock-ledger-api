@@ -9,9 +9,10 @@ spring:
       max-file-size: 10MB
       max-request-size: 12MB
   datasource:
-    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/ledger}
-    username: ${DATABASE_USER:ledger}
-    password: ${DATABASE_PASSWORD:ledger}
+    # Railway's PostgreSQL variables. DATABASE_URL is not used because Railway provides it as postgresql://, not jdbc:.
+    url: jdbc:postgresql://${PGHOST:localhost}:${PGPORT:5432}/${PGDATABASE:ledger}
+    username: ${PGUSER:ledger}
+    password: ${PGPASSWORD:ledger}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -36,3 +37,10 @@ ledger:
   bootstrap-admin-email: ${BOOTSTRAP_ADMIN_EMAIL:}
   bootstrap-admin-name: ${BOOTSTRAP_ADMIN_NAME:Administrator}
   bootstrap-admin-password: ${BOOTSTRAP_ADMIN_PASSWORD:}
+  # Railway Storage Bucket (S3-compatible). Leave ENDPOINT unset to run without a bucket.
+  storage:
+    endpoint: ${ENDPOINT:}
+    region: ${REGION:auto}
+    bucket: ${BUCKET:}
+    access-key-id: ${ACCESS_KEY_ID:}
+    secret-access-key: ${SECRET_ACCESS_KEY:}

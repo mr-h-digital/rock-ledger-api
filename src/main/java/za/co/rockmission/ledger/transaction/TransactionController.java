@@ -6,13 +6,21 @@ import java.math.BigDecimal;
 import java.security.Principal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
+import za.co.rockmission.ledger.storage.FileStore;
 
 @RestController
 @RequestMapping("/api/transactions")
 public class TransactionController {
+    private static final int MAX_FILE_NAME_LENGTH = 300;
 
     public record NewTransaction(
             @NotNull LocalDate txnDate,
@@ -28,9 +36,13 @@ public class TransactionController {
             String notes) {}
 
     private final TransactionRepository repo;
+    private final JdbcTemplate jdbc;
+    private final FileStore files;
 
-    public TransactionController(TransactionRepository repo) {
+    public TransactionController(TransactionRepository repo, JdbcTemplate jdbc, FileStore files) {
         this.repo = repo;
+        this.jdbc = jdbc;
+        this.files = files;
     }
 
     @GetMapping
@@ -70,6 +82,75 @@ public class TransactionController {
         t.setNotes(in.notes());
         t.setCreatedBy(who.getName());
         return repo.save(t);
+    }
+
+    @GetMapping("/{id}/attachments")
+    public List<Map<String, Object>> attachments(@PathVariable Long id) {
+        requireTransaction(id);
+        return jdbc.queryForList("""
+            SELECT id, file_name, content_type, uploaded_by, uploaded_at
+            FROM attachments WHERE transaction_id = ? ORDER BY uploaded_at, id
+            """, id);
+    }
+
+    @GetMapping("/{id}/document-history")
+    public List<Map<String, Object>> documentHistory(@PathVariable Long id) {
+        requireTransaction(id);
+        return jdbc.queryForList("""
+            SELECT actor, action, detail, at
+            FROM audit_log
+            WHERE entity = 'transaction' AND entity_id = ?
+                AND action IN ('ATTACH_DOCUMENT', 'DELETE_DOCUMENT')
+            ORDER BY at, id
+            """, id);
+    }
+
+    @PostMapping(value = "/{id}/attachments", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @ResponseStatus(HttpStatus.CREATED)
+    @Transactional
+    public Map<String, Object> uploadAttachment(
+            @PathVariable Long id, @RequestParam("file") MultipartFile file, Principal who) {
+        requireTransaction(id);
+        if (file.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose a non-empty file to upload");
+        }
+        if (!files.enabled()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "Document storage is not configured");
+        }
+
+        String name = safeFileName(file.getOriginalFilename());
+        String contentType = file.getContentType() == null ? MediaType.APPLICATION_OCTET_STREAM_VALUE : file.getContentType();
+        String key = "transaction-documents/" + id + "/" + UUID.randomUUID();
+        try {
+            files.put(key, file.getBytes(), contentType);
+            Long attachmentId = jdbc.queryForObject("""
+                INSERT INTO attachments (transaction_id, object_key, file_name, content_type, uploaded_by)
+                VALUES (?,?,?,?,?) RETURNING id
+                """, Long.class, id, key, name, contentType, who.getName());
+            jdbc.update("INSERT INTO audit_log (actor, action, entity, entity_id, detail) VALUES (?,?,?,?,?)",
+                who.getName(), "ATTACH_DOCUMENT", "transaction", id, name);
+            return Map.of("id", attachmentId, "fileName", name);
+        } catch (Exception failure) {
+            try {
+                files.delete(key);
+            } catch (RuntimeException cleanupFailure) {
+                failure.addSuppressed(cleanupFailure);
+            }
+            if (failure instanceof RuntimeException runtimeFailure) throw runtimeFailure;
+            throw new IllegalStateException("Could not store the uploaded document", failure);
+        }
+    }
+
+    private void requireTransaction(Long id) {
+        if (!repo.existsById(id)) throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+    }
+
+    private static String safeFileName(String originalName) {
+        String name = originalName == null ? "document" : originalName.replace('\\', '/');
+        name = name.substring(name.lastIndexOf('/') + 1).replaceAll("[\\p{Cntrl}]", "").trim();
+        if (name.isEmpty()) name = "document";
+        return name.length() <= MAX_FILE_NAME_LENGTH ? name : name.substring(name.length() - MAX_FILE_NAME_LENGTH);
     }
 
     /** Ledger entries are never edited or deleted: a correction is a reversal plus a new entry. */

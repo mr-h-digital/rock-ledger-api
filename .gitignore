@@ -7,7 +7,7 @@
 /frontend/npm-debug.log*
 
 # Backend (Maven / Spring Boot)
-/backend/target/
+/target/
 /backend/*.log
 /backend/.env
 /backend/.env.*

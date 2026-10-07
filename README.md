@@ -79,9 +79,16 @@ Flyway applies the database migrations automatically. The API listens at `http:/
 | Variable | Purpose | Default |
 |---|---|---|
 | `PORT` | HTTP server port | `8080` |
-| `DATABASE_URL` | JDBC PostgreSQL URL | `jdbc:postgresql://localhost:5432/ledger` |
-| `DATABASE_USER` | Database username | `ledger` |
-| `DATABASE_PASSWORD` | Database password | `ledger` |
+| `PGHOST` | PostgreSQL host (Railway-provided) | `localhost` |
+| `PGPORT` | PostgreSQL port (Railway-provided) | `5432` |
+| `PGDATABASE` | Database name (Railway-provided) | `ledger` |
+| `PGUSER` | Database user (Railway-provided) | `ledger` |
+| `PGPASSWORD` | Database password (Railway-provided) | `ledger` |
+| `ENDPOINT` | S3-compatible bucket endpoint (Railway-provided); storage is disabled when empty | Empty |
+| `BUCKET` | Bucket name (Railway-provided) | Empty |
+| `REGION` | Bucket region (Railway-provided) | `auto` |
+| `ACCESS_KEY_ID` | Bucket access key (Railway-provided) | Empty |
+| `SECRET_ACCESS_KEY` | Bucket secret key (Railway-provided) | Empty |
 | `APP_SECRET` | Random secret (32+ characters) used to derive JWT and TOTP-encryption keys | Required |
 | `ALLOWED_ORIGIN` | Exact allowed frontend origin for credentialed CORS | `http://localhost:5173` |
 | `COOKIE_SECURE` | Set the refresh cookie's `Secure` flag; disable only for local HTTP | `true` |
