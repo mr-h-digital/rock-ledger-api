@@ -1,0 +1,38 @@
+server:
+  port: ${PORT:8080}
+  error:
+    include-message: always
+
+spring:
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 12MB
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/ledger}
+    username: ${DATABASE_USER:ledger}
+    password: ${DATABASE_PASSWORD:ledger}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+ledger:
+  allowed-origin: ${ALLOWED_ORIGIN:http://localhost:5173}
+  # One long random string (32+ characters). JWT signing and authenticator-secret encryption keys are derived from it.
+  # Changing it signs everyone out AND makes stored authenticator secrets unreadable (reset users to re-enrol).
+  secret: ${APP_SECRET:}
+  # Refresh cookie is Secure (HTTPS only). Browsers still allow it on http://localhost for development.
+  cookie-secure: ${COOKIE_SECURE:true}
+  # Only used when the users table is empty. Remove after first sign-in.
+  bootstrap-admin-email: ${BOOTSTRAP_ADMIN_EMAIL:}
+  bootstrap-admin-name: ${BOOTSTRAP_ADMIN_NAME:Administrator}
+  bootstrap-admin-password: ${BOOTSTRAP_ADMIN_PASSWORD:}

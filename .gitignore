@@ -1,0 +1,30 @@
+# Frontend (Vite / npm)
+/frontend/node_modules/
+/frontend/dist/
+/frontend/.env
+/frontend/.env.*
+!/frontend/.env.example
+/frontend/npm-debug.log*
+
+# Backend (Maven / Spring Boot)
+/backend/target/
+/backend/*.log
+/backend/.env
+/backend/.env.*
+
+# Claude Code local state (keep shared project instructions/config tracked)
+/.claude/settings.local.json
+/.claude/*.local.*
+/.claude/worktrees/
+/CLAUDE.local.md
+
+# Java
+*.class
+
+# Logs
+*.log
+
+# Local operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
