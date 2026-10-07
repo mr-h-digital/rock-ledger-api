@@ -1,29 +1,49 @@
-# Rock Ledger — Backend
+# Rock Ledger | Backend
 
-The Spring Boot REST API and PostgreSQL persistence layer for Rock Ledger. It provides authenticated ledger operations, user administration, immutable transaction history, and Capitec PDF statement import.
+> The secure API and data layer behind the ministry's financial ledger.
 
-[Project overview and deployment guide](../README.md) · [Frontend documentation](../frontend/README.md)
+[![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)](https://openjdk.org/)
+[![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.3-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+
+The Spring Boot REST API and PostgreSQL persistence layer for **Rock Ledger**. It powers authenticated ledger operations, user administration, immutable transaction history, and Capitec PDF statement imports.
+
+| [Project overview](../README.md) | [Frontend guide](../frontend/README.md) |
+|:---:|:---:|
+
+## The shape of the system
+
+```mermaid
+flowchart LR
+    FE[React frontend] -->|JSON + refresh cookie| API[Spring Boot API]
+    API -->|JPA + SQL| DB[(PostgreSQL)]
+    API -->|Flyway migrations| DB
+    PDF[Capitec statement PDF] -->|PDFBox extraction| API
+```
 
 ## Stack
 
-- Java 21 and Spring Boot 3.3
-- Maven
-- PostgreSQL
-- Spring Security with signed JWT access tokens
-- Flyway database migrations
-- Apache PDFBox for statement text extraction
+| Layer | Technology |
+|---|---|
+| Runtime | Java 21 · Spring Boot 3.3 |
+| API security | Spring Security · signed JWT access tokens · TOTP |
+| Data | PostgreSQL · Spring Data JPA · Flyway |
+| Statement parsing | Apache PDFBox |
+| Build | Maven |
 
-## Requirements
+## Get started
+
+### You will need
 
 - JDK 21
 - Maven 3.6.3 or later
 - PostgreSQL 16 (or a compatible PostgreSQL server)
 
-## Run locally
+### 1. Start PostgreSQL
 
-Start PostgreSQL. For example, using Docker:
+For a local database, use Docker:
 
-```bash
+```powershell
 docker run -d --name ledger-db `
   -e POSTGRES_USER=ledger `
   -e POSTGRES_PASSWORD=ledger `
@@ -31,11 +51,13 @@ docker run -d --name ledger-db `
   -p 5432:5432 postgres:16
 ```
 
-PowerShell uses the backtick for line continuation; the same command can be written on one line or adapted for another shell.
+The backtick is PowerShell's line-continuation character. For other shells, put the command on one line or use that shell's continuation syntax.
 
-Set the required application secret and bootstrap-admin credentials, then start the API from this directory:
+### 2. Configure and run the API
 
-```bash
+From this directory, set the required application secret and first-admin credentials, then launch Spring Boot:
+
+```powershell
 $env:APP_SECRET = (openssl rand -base64 48)
 $env:BOOTSTRAP_ADMIN_EMAIL = "you@example.org"
 $env:BOOTSTRAP_ADMIN_PASSWORD = "a-temporary-12+char-password"
@@ -43,9 +65,9 @@ $env:COOKIE_SECURE = "false"
 mvn spring-boot:run
 ```
 
-`APP_SECRET` must be a random string of at least 32 characters. The bootstrap admin is created only when the users table is empty. Use a temporary password, sign in, replace it, enrol an authenticator app, and remove the bootstrap credentials from the environment afterward.
+`APP_SECRET` must be a random string of at least 32 characters. Bootstrap credentials are used only when the database has no users. Sign in, replace the temporary password, enrol an authenticator app, and remove the bootstrap credentials from the environment.
 
-The defaults connect to `jdbc:postgresql://localhost:5432/ledger` as `ledger` / `ledger`. Flyway applies the schema and seed migrations automatically. The API listens on `http://localhost:8080`; its health endpoint is `GET /actuator/health`.
+Flyway applies the database migrations automatically. The API listens at `http://localhost:8080`; health is available at `GET /actuator/health`. Local database defaults are `ledger` / `ledger` on `localhost:5432`.
 
 ## Configuration
 
@@ -55,20 +77,20 @@ The defaults connect to `jdbc:postgresql://localhost:5432/ledger` as `ledger` / 
 | `DATABASE_URL` | JDBC PostgreSQL URL | `jdbc:postgresql://localhost:5432/ledger` |
 | `DATABASE_USER` | Database username | `ledger` |
 | `DATABASE_PASSWORD` | Database password | `ledger` |
-| `APP_SECRET` | Random secret (32+ characters), used to derive JWT and TOTP-encryption keys | Required |
-| `ALLOWED_ORIGIN` | Exact allowed browser origin for credentialed CORS | `http://localhost:5173` |
-| `COOKIE_SECURE` | Set refresh-cookie `Secure` flag; disable only for local HTTP development | `true` |
-| `BOOTSTRAP_ADMIN_EMAIL` | Initial administrator email, used only if there are no users | Empty |
-| `BOOTSTRAP_ADMIN_NAME` | Initial administrator name | `Administrator` |
-| `BOOTSTRAP_ADMIN_PASSWORD` | Initial administrator's temporary password | Empty |
+| `APP_SECRET` | Random secret (32+ characters) used to derive JWT and TOTP-encryption keys | Required |
+| `ALLOWED_ORIGIN` | Exact allowed frontend origin for credentialed CORS | `http://localhost:5173` |
+| `COOKIE_SECURE` | Set the refresh cookie's `Secure` flag; disable only for local HTTP | `true` |
+| `BOOTSTRAP_ADMIN_EMAIL` | Initial admin email, only used if no users exist | Empty |
+| `BOOTSTRAP_ADMIN_NAME` | Initial admin name | `Administrator` |
+| `BOOTSTRAP_ADMIN_PASSWORD` | Initial admin temporary password | Empty |
 
-Changing `APP_SECRET` invalidates existing sessions and makes stored authenticator secrets unreadable; users will need their authenticator setup reset. Keep it stable, private, and backed up securely. Never commit production secrets.
+> **Protect `APP_SECRET`.** Keep a stable, secure backup. Changing it signs users out and makes stored authenticator secrets unreadable, requiring users to enrol again. Never commit production secrets.
 
-## API overview
+## API map
 
-All API routes are under `/api`. Protected endpoints require a bearer access token, obtained through the sign-in flow.
+All routes are under `/api`. Protected routes require a bearer access token; the refresh/logout endpoints use the backend-managed refresh cookie.
 
-| Area | Routes |
+| Area | Endpoints |
 |---|---|
 | Authentication | `POST /auth/login`, `/auth/set-password`, `/auth/enrol/start`, `/auth/enrol/confirm`, `/auth/verify`, `/auth/refresh`, `/auth/logout`, `/auth/change-password` |
 | Lookups | `GET /lookups` |
@@ -78,50 +100,51 @@ All API routes are under `/api`. Protected endpoints require a bearer access tok
 | Organisation and reports | `GET /organisation`, `GET /financial-years`, `GET /reports/year/{id}`, `GET /reports/balances`, `GET /reports/director-loans` |
 | User administration | `GET /users`, `POST /users`, `POST /users/{id}/reset`, `PATCH /users/{id}/active` |
 
-Role authorization is enforced by the API:
+### Access roles
 
-| Role | Access |
+| Role | Permissions |
 |---|---|
-| `ADMIN` | All application operations, including user administration |
-| `TREASURER` | Ledger capture, statement import/review/posting, and read access |
+| `ADMIN` | Full access, including user administration |
+| `TREASURER` | Capture ledger entries; import and post bank statements; read data |
 | `VIEWER` | Read-only access; cannot access imported bank statements |
 
-## Accounting and statement handling
+## Accounting safeguards
 
-- Transactions are not edited or deleted. Use the reversal endpoint to record a correction; the original entry remains in the audit trail.
-- Loans are represented separately from income and expenses (`LOAN_IN` and `LOAN_OUT`).
-- Financial-year boundaries and posting restrictions are maintained by database migrations and constraints.
-- Statement PDFs are retained in the database as evidence. Uploads are limited to 10 MB per file.
-- Statement imports detect duplicate statements and duplicate lines, return opening/closing-balance continuity warnings, and queue new lines for explicit review before posting.
-- Bank fees can be posted as Bank charges; transaction fees discovered on a posted line are recorded separately.
+- **Append-only ledger:** Entries are never edited or deleted. A correction is another entry recorded as a reversal.
+- **Loans stay distinct:** `LOAN_IN` and `LOAN_OUT` are kept separate from income and expenses.
+- **Controlled bank import:** PDFs are retained as evidence; duplicate statements and lines are detected; balance-chain warnings are returned; lines wait for review before posting.
+- **Auditable fees:** Bank fees can be posted as Bank charges; transaction fees are recorded separately when a line is posted.
+- **Financial-year controls:** Versioned migrations establish financial years and protect closed periods.
 
 ## Database migrations
 
-Flyway migration scripts live in `src/main/resources/db/migration/`. They create the ledger schema and seed the organisation, accounts, financial years, categories, and authentication structures. Do not edit a migration that has already been applied to a deployed database; add a new versioned migration instead.
+Flyway scripts are in `src/main/resources/db/migration/`. They create and seed the ledger schema, organisation, accounts, financial years, categories, and authentication tables.
 
-## Build and tests
+> Once a migration has been applied to a deployed database, leave it unchanged. Add a new versioned migration for subsequent schema changes.
+
+## Build and test
 
 ```bash
 mvn test
 mvn package
 ```
 
-The packaged Spring Boot JAR is written to `target/`.
+The executable Spring Boot JAR is generated in `target/`.
 
-## Deployment
+## Deploy
 
-Deploy this directory as the backend service and configure a PostgreSQL database plus the production variables above. Set `ALLOWED_ORIGIN` to the exact frontend origin and keep `COOKIE_SECURE=true` in HTTPS environments. For Railway and custom-domain setup, follow the [root deployment guide](../README.md).
+Deploy this directory as the backend service with a PostgreSQL database and the production environment variables above. Set `ALLOWED_ORIGIN` to the exact frontend origin and keep `COOKIE_SECURE=true` over HTTPS. Follow the [project deployment guide](../README.md) for Railway and custom-domain setup.
 
-## Source layout
+## Source map
 
 ```text
 src/main/java/za/co/rockmission/ledger/
-  auth/          Password, TOTP, token, and user-management flows
-  config/        Spring Security, authorization, and CORS
+  auth/          Password, TOTP, tokens, user administration
+  config/        Spring Security, authorization, CORS
   lookup/        Capture-form reference data
   report/        Financial-year, balance, and loan reports
-  statement/     PDF extraction, parsing, and bank-line posting
-  transaction/   Ledger transaction API and persistence
+  statement/     PDF extraction, parsing, bank-line posting
+  transaction/   Ledger API and persistence
 src/main/resources/
   application.yml
   db/migration/  Versioned Flyway SQL migrations
