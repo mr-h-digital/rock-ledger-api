@@ -20,13 +20,13 @@ import org.springframework.stereotype.Service;
 
 /**
  * access token  : 15 minutes, carries the role, kept in browser memory only
- * pending token : 5 minutes, only good for the next login step (set password / enrol / enter code)
+ * pending token : 10 minutes, only good for the next login step (set password / enrol / enter code)
  * refresh token : 12 hours, random, stored hashed, delivered in an HttpOnly cookie and rotated on every use
  */
 @Service
 public class TokenService {
     public static final Duration ACCESS = Duration.ofMinutes(15);
-    public static final Duration PENDING = Duration.ofMinutes(5);
+    public static final Duration PENDING = Duration.ofMinutes(10);
     public static final Duration REFRESH = Duration.ofHours(12);
 
     private final JwtEncoder encoder;
@@ -50,7 +50,7 @@ public class TokenService {
         Instant now = Instant.now();
         JwtClaimsSet.Builder b = JwtClaimsSet.builder()
             .issuer("rock-ledger").subject(u.email()).issuedAt(now).expiresAt(now.plus(ttl)).claim("uid", u.id());
-        extra.forEach((k, v) -> b.claim(k, v));
+        extra.forEach(b::claim);
         return encoder.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), b.build()))
             .getTokenValue();
     }
@@ -70,7 +70,7 @@ public class TokenService {
         List<Long> ids = jdbc.queryForList(
             "DELETE FROM refresh_tokens WHERE token_hash = ? AND expires_at > now() RETURNING user_id",
             Long.class, sha256(token));
-        return ids.isEmpty() ? null : ids.get(0);
+        return ids.isEmpty() ? null : ids.getFirst();
     }
 
     public void revokeRefreshToken(String token) {

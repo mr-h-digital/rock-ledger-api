@@ -39,8 +39,13 @@ import za.co.rockmission.ledger.auth.SecretBox;
 public class SecurityConfig {
 
     private static String requireSecret(String s) {
-        if (s == null || s.length() < 32) {
-            throw new IllegalStateException("Set APP_SECRET to a random string of at least 32 characters.");
+        if (s == null || s.isBlank()) {
+            throw new IllegalStateException(
+                    "APP_SECRET is not set on this service. Set it to a random string of at least 32 characters.");
+        }
+        if (s.length() < 32) {
+            throw new IllegalStateException("APP_SECRET is only " + s.length()
+                    + " characters long. Set it to a random string of at least 32 characters.");
         }
         return s;
     }
@@ -76,9 +81,9 @@ public class SecurityConfig {
     JwtAuthenticationConverter jwtAuthenticationConverter() {
         JwtAuthenticationConverter c = new JwtAuthenticationConverter();
         c.setJwtGrantedAuthoritiesConverter(jwt -> {
-            if (!"access".equals(jwt.getClaimAsString("tt"))) return List.<GrantedAuthority>of();
+            if (!"access".equals(jwt.getClaimAsString("tt"))) return List.of();
             List<String> roles = jwt.getClaimAsStringList("roles");
-            if (roles == null) return List.<GrantedAuthority>of();
+            if (roles == null) return List.of();
             return roles.stream().<GrantedAuthority>map(r -> new SimpleGrantedAuthority("ROLE_" + r)).toList();
         });
         return c;
@@ -93,6 +98,8 @@ public class SecurityConfig {
             .authorizeHttpRequests(a -> a
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/actuator/health").permitAll()
+                // Spring forwards exceptions to /error; without this, pending-token users get a bare 403 instead of the real message
+                .requestMatchers("/error").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/refresh", "/api/auth/logout").permitAll()
                 .requestMatchers("/api/auth/**").authenticated()
                 .requestMatchers("/api/users/**").hasRole("ADMIN")
@@ -109,6 +116,7 @@ public class SecurityConfig {
         c.setAllowedOrigins(List.of(origin));
         c.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         c.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With"));
+        c.setExposedHeaders(List.of("WWW-Authenticate"));
         c.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource s = new UrlBasedCorsConfigurationSource();
         s.registerCorsConfiguration("/**", c);

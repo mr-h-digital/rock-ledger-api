@@ -86,8 +86,12 @@ public class AuthController {
     public Map<String, Object> enrolStart(@AuthenticationPrincipal Jwt jwt) {
         AppUser u = pendingUser(jwt, "ENROL");
         if (u.totpEnabled()) throw new ResponseStatusException(HttpStatus.CONFLICT, "Authenticator already set up");
-        String secret = Totp.newSecret();
-        users.storeTotpSecret(u.id(), box.seal(secret));
+        // Reuse an unconfirmed key so an entry already added to the phone keeps working after signing in again
+        String secret = u.totpSecretEnc() != null ? box.open(u.totpSecretEnc()) : null;
+        if (secret == null) {
+            secret = Totp.newSecret();
+            users.storeTotpSecret(u.id(), box.seal(secret));
+        }
         return Map.of("secret", secret, "otpauthUri", Totp.uri("Rock Ledger", u.email(), secret));
     }
 
