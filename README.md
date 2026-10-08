@@ -106,10 +106,11 @@ All routes are under `/api`. Protected routes require a bearer access token; the
 |---|---|
 | Authentication | `POST /auth/login`, `/auth/set-password`, `/auth/enrol/start`, `/auth/enrol/confirm`, `/auth/verify`, `/auth/refresh`, `/auth/logout`, `/auth/change-password` |
 | Lookups | `GET /lookups` |
-| Transactions | `GET /transactions`, `POST /transactions`, `POST /transactions/{id}/reverse` |
+| Transactions | `GET /transactions?from=&to=` (defaults to the last 90 days), `POST /transactions`, `POST /transactions/{id}/reverse` |
 | Bank statements | `POST /bank-statements`, `GET /bank-statements` |
 | Bank lines | `GET /bank-lines?status=unposted\|posted\|all`, `POST /bank-lines/{id}/post`, `POST /bank-lines/post-fees` |
 | Organisation and reports | `GET /organisation`, `GET /financial-years`, `GET /reports/year/{id}`, `GET /reports/balances`, `GET /reports/director-loans` |
+| Dashboard and exports (any period, `?from=YYYY-MM-DD&to=YYYY-MM-DD`) | `GET /reports/summary` (totals, monthly trend, categories, funds, balances and loans at period end), `GET /reports/summary.csv`, `GET /reports/transactions.csv`, `GET /reports/report.pdf` |
 | User administration | `GET /users`, `POST /users`, `POST /users/{id}/reset`, `PATCH /users/{id}/active` |
 
 ### Access roles

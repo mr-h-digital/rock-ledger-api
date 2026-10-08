@@ -7,7 +7,9 @@ import java.security.Principal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -47,10 +49,11 @@ public class TransactionController {
 
     @GetMapping
     public List<Transaction> list(
-            @RequestParam(required = false) LocalDate from,
-            @RequestParam(required = false) LocalDate to) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         LocalDate end = to != null ? to : LocalDate.now();
         LocalDate start = from != null ? from : end.minusDays(90);
+        if (start.isAfter(end)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The start date is after the end date");
         return repo.findByTxnDateBetweenOrderByTxnDateDescIdDesc(start, end);
     }
 
@@ -124,10 +127,10 @@ public class TransactionController {
         String key = "transaction-documents/" + id + "/" + UUID.randomUUID();
         try {
             files.put(key, file.getBytes(), contentType);
-            Long attachmentId = jdbc.queryForObject("""
+            Long attachmentId = Objects.requireNonNull(jdbc.queryForObject("""
                 INSERT INTO attachments (transaction_id, object_key, file_name, content_type, uploaded_by)
                 VALUES (?,?,?,?,?) RETURNING id
-                """, Long.class, id, key, name, contentType, who.getName());
+                """, Long.class, id, key, name, contentType, who.getName()));
             jdbc.update("INSERT INTO audit_log (actor, action, entity, entity_id, detail) VALUES (?,?,?,?,?)",
                 who.getName(), "ATTACH_DOCUMENT", "transaction", id, name);
             return Map.of("id", attachmentId, "fileName", name);
